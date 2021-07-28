@@ -9,10 +9,11 @@ from utilities.waveform import Waveform, DEFAULT_FMAX
 class XVarOptions:
     ANGLE = "angle"
     COSANGLE = "cos"
+    HEIGHT = "height"
     TIME = "time"
-    ALL_CHOICES = [ANGLE, COSANGLE, TIME]
+    ALL_CHOICES = [ANGLE, COSANGLE, HEIGHT, TIME]
 
-def plot(data, labels, output=None, xlim=None, ylim=None, yvar="area", xvar=XVarOptions.ANGLE, fmax=DEFAULT_FMAX, dohemisphere=False):
+def plot(data, labels, output=None, xlim=None, ylim=None, anglelim=None, heightlim=None, yvar="area", xvar=XVarOptions.ANGLE, fmax=DEFAULT_FMAX, dohemisphere=False):
     fig = plt.figure(figsize=(9,18))
     ax1 = fig.add_subplot(2, 1, 1)
     ax2 = fig.add_subplot(2, 1, 2)
@@ -20,7 +21,7 @@ def plot(data, labels, output=None, xlim=None, ylim=None, yvar="area", xvar=XVar
     colmap = itertools.cycle(range(Ncol))
     for i, (d, l) in enumerate(zip(data, labels)):
         color = matplotlib.cm.hot(float(next(colmap))/float(Ncol))
-        _plot_series(ax1, ax2, d.scanpoints, color, l, yvar=yvar, xlim=xlim, xvar=xvar, fmax=fmax, dohemisphere=dohemisphere)
+        _plot_series(ax1, ax2, d.scanpoints, color, l, yvar=yvar, xlim=xlim, anglelim=anglelim, heightlim=heightlim, xvar=xvar, fmax=fmax, dohemisphere=dohemisphere)
     #finalise the plot
     ax1.legend()
     ax2.legend()
@@ -36,19 +37,30 @@ def plot(data, labels, output=None, xlim=None, ylim=None, yvar="area", xvar=XVar
         _writefig(fig, output)
     return
 
-def _plot_series(ax1, ax2, data, color, label, yvar="area", xlim=None, xvar=XVarOptions.ANGLE, fmax=DEFAULT_FMAX, dohemisphere=False):
+def _plot_series(ax1, ax2, data, color, label, yvar="area", xlim=None, anglelim=None, heightlim=None, xvar=XVarOptions.ANGLE, fmax=DEFAULT_FMAX, dohemisphere=False):
+    temperature = 0.
+    humidity = 0.
     if xvar == XVarOptions.COSANGLE:
         xtransform = lambda x: math.cos(x.coord_angle*math.pi/180.)
     elif xvar == XVarOptions.ANGLE:
         xtransform = lambda x: x.coord_angle
+    elif xvar == XVarOptions.HEIGHT:
+        xtransform = lambda x: x.coord_y
     elif xvar == XVarOptions.TIME:
         xtransform = lambda x: x.num_entry
     get_yvar = lambda x: getattr(Waveform(x.axis_time, x.samples_PMT, fmax), yvar)
     X_list, Y_list = [], []
     for d in data:
-        if xlim is None or xlim[0] <= d.coord_angle <= xlim[1]:
+        if rangecheck(xtransform(d), xlim) and rangecheck(d.coord_angle, anglelim) and rangecheck(d.coord_y, heightlim):
             X_list.append(xtransform(d))
             Y_list.append(get_yvar(d) * hemisphere_correction(d.coord_angle, yvar, dohemisphere))
+            temperature += d.lab_temp
+            humidity += d.lab_humid
+
+    temperature /= len(X_list)
+    humidity /= len(X_list)
+    print("Average temperature: {:.2f}C".format(temperature))
+    print("Average humidity: {:.2f}%".format(humidity))
 
     X = np.array(X_list, dtype=float)
     Y = np.array(Y_list, dtype=float)
@@ -84,6 +96,9 @@ def _plot_series(ax1, ax2, data, color, label, yvar="area", xlim=None, xvar=XVar
     ax2.set_xlabel("angle [degrees]")
     return
 
+def rangecheck(var, lim):
+    return lim == None or lim[0] <= var <= lim[1]
+
 def _writefig(fig, output):
     try:
         os.makedirs(os.path.dirname(output))
@@ -116,7 +131,7 @@ def hemisphere_correction(angle, var, dohemisphere):
     if dohemisphere and var in ["area", "amplitude"]:
         theta = float(angle)*np.pi/180. # Convert to radians
         return 1.0 / (1.0 - (abs(theta) / np.pi))
-    else
+    else:
         return 1.0
 
 def parsecml():
@@ -126,6 +141,8 @@ def parsecml():
     parser.add_argument("filename", nargs="+", help="Input filename.")
     parser.add_argument("--xlim", type=str, help="Set x-axis limits.", default=None)
     parser.add_argument("--ylim", type=str, help="Set y-axis limits.", default=None)
+    parser.add_argument("--anglelim", type=str, help="Set limits on angle.", default=None)
+    parser.add_argument("--heightlim", type=str, help="Set limits on PMT height.", default=None)
     parser.add_argument("--yvar", type=str, default="area", help="Choose y-axis variable")
     parser.add_argument("--xvar", type=str, default=XVarOptions.ANGLE, choices=XVarOptions.ALL_CHOICES)
     parser.add_argument("--hemisphere-correction", "-c", action="store_true", help="Apply correction (1-theta/pi) to intensity measurments to account for hemisphere geometry.")
@@ -141,15 +158,21 @@ def main():
         labels = args.labels.split(",")
     else:
         labels = ["series %s" % n for n in range(len(data))]
-    xlim, ylim = None, None
+    xlim, ylim, anglelim, heightlim = None, None, None, None
     if args.xlim:
         low, high = args.xlim.split(",")
         xlim = (float(low), float(high))
     if args.ylim:
         low, high = args.ylim.split(",")
         ylim = (float(low), float(high))
+    if args.anglelim:
+        low, high = args.anglelim.split(",")
+        anglelim = (float(low), float(high))
+    if args.heightlim:
+        low, high = args.heightlim.split(",")
+        heightlim = (float(low), float(high))
     fmax=args.fmax if args.filter else None
-    plot(data, labels, args.output, xlim=xlim, ylim=ylim, yvar=args.yvar, xvar=args.xvar, fmax=fmax, dohemisphere=args.hemisphere_correction)
+    plot(data, labels, args.output, xlim=xlim, ylim=ylim, anglelim=anglelim, heightlim=heightlim, yvar=args.yvar, xvar=args.xvar, fmax=fmax, dohemisphere=args.hemisphere_correction)
     return
 
 if __name__ == "__main__":
