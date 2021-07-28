@@ -17,10 +17,10 @@ class ScanPoint:
         self.axis_time = np.arange(len(samples_PMT), dtype=float) * dt * 1.e9
         self.num_entry = num_entry
 
-    def getWaveformPMT(self, fmax=0.2e9, peaknorm=False, areanorm=False):
+    def getWaveformPMT(self, fmax=None, peaknorm=False, areanorm=False):
       return Waveform(self.axis_time, self.samples_PMT, fmax, peaknorm, areanorm)
     
-    def getWaveformPD(self, fmax=0.2e9, peaknorm=False, areanorm=False):
+    def getWaveformPD(self, fmax=None, peaknorm=False, areanorm=False):
       return Waveform(self.axis_time, self.samples_PD, fmax, peaknorm, areanorm)
 
     def getDatetime(self):
