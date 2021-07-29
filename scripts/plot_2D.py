@@ -57,7 +57,7 @@ def _plot_series(ax1, ax2, data, color, label, xlim=None, ylim=None, zlim=None, 
     Y = np.array(Y_list, dtype=float)    
     Z = np.array(Z_list, dtype=float)
 
-    #ax1.scatter(X, Y, Z, color=color, alpha=0.5)
+    ax1.scatter(X, Y, Z, color=color, alpha=0.5)
 
     newX, newY, meanZ, errZ = _get_angle_scan_moments(X_list, Y_list, Z_list)
     #ax1.scatter(newX, newY, meanZ, "-", color=color, label=label)

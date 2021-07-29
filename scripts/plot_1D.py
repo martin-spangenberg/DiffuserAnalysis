@@ -134,6 +134,14 @@ def hemisphere_correction(angle, var, dohemisphere):
     else:
         return 1.0
 
+def _writefig(fig, output):
+    try:
+        os.makedirs(os.path.dirname(output))
+    except:
+        pass
+    fig.savefig(output)
+    return
+
 def parsecml():
     parser = ArgumentParser()
     parser.add_argument("-o", "--output", help="Output filename", default=None)

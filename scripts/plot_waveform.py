@@ -68,6 +68,14 @@ def _print_waveform(wave, label):
         print("%s : %.3e" % (var, getattr(wave, var)))
     return
 
+def _writefig(fig, output):
+    try:
+        os.makedirs(os.path.dirname(output))
+    except:
+        pass
+    fig.savefig(output)
+    return
+
 def parsecml():
     parser = ArgumentParser()
     parser.add_argument("-o", "--output", help="Output filename", default=None)
