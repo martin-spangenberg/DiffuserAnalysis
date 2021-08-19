@@ -3,7 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import itertools
-from utilities.readscan import readscan
+from utilities.readscan import readscan, combinefiles
 from utilities.waveform import Waveform, DEFAULT_FMAX
 
 class XVarOptions:
@@ -147,6 +147,7 @@ def parsecml():
     parser.add_argument("-o", "--output", help="Output filename", default=None)
     parser.add_argument("--labels", help="Comma separated list of names", default=None)
     parser.add_argument("filename", nargs="+", help="Input filename.")
+    parser.add_argument("--combinefiles", action="store_true", help="Combine input files and plot them as a single series.")
     parser.add_argument("--xlim", type=str, help="Set x-axis limits.", default=None)
     parser.add_argument("--ylim", type=str, help="Set y-axis limits.", default=None)
     parser.add_argument("--anglelim", type=str, help="Set limits on angle.", default=None)
@@ -162,6 +163,8 @@ def main():
     args = parsecml()
     matplotlib.rc('legend', fontsize="x-small")
     data = [readscan(f, "diffuser") for f in args.filename]
+    if args.combinefiles:
+        data = [combinefiles(data)]
     if args.labels:
         labels = args.labels.split(",")
     else:

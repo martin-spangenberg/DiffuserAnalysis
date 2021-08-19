@@ -80,3 +80,16 @@ def readscan(filename, treename):
         raise NotImplementedError("Input format version not implemented")
 
     return diffuserscan
+
+def combinefiles(scans):
+    combined_scan = scans[0]
+    compare_vars = ["ID_PMT", "ID_PD", "ID_lightsource", "pulse_rate", "pulse_N"]
+    for scan in scans[1:]:
+        combined_scan.scanpoints.extend(scan.scanpoints)
+        if scan.ID_diffuser != combined_scan.ID_diffuser:
+            combined_scan.ID_diffuser = "multi"
+        for var in compare_vars:
+            if getattr(scan, var) != getattr(combined_scan, var):
+                print('WARNING: Variable "{}" does not match between files! Should we be comparing them?'.format(var))
+
+    return combined_scan
