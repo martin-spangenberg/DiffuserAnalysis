@@ -97,6 +97,7 @@ class Waveform(object):
     def integralindex_low(self):
         pedestal = self.pedestal
         #integrate falling edge
+        ii = 0
         for ii in reversed(range(0, self.peak_index)):
             if (self.Y[ii] - pedestal) > 0.0:
                 break

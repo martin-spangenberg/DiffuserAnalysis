@@ -3,6 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import itertools
+import math
 from utilities.readscan import readscan, combinefiles
 from utilities.waveform import Waveform, DEFAULT_FMAX
 
@@ -10,10 +11,11 @@ class XVarOptions:
     ANGLE = "angle"
     COSANGLE = "cos"
     HEIGHT = "height"
+    VERTANGLE = "vertangle"
     TIME = "time"
-    ALL_CHOICES = [ANGLE, COSANGLE, HEIGHT, TIME]
+    ALL_CHOICES = [ANGLE, COSANGLE, HEIGHT, VERTANGLE, TIME]
 
-def plot(data, labels, output=None, xlim=None, ylim=None, anglelim=None, heightlim=None, yvar="area", xvar=XVarOptions.ANGLE, fmax=DEFAULT_FMAX, dohemisphere=False):
+def plot(data, labels, channelname, output=None, xlim=None, ylim=None, anglelim=None, heightlim=None, centre_height=None, pmt_dist=None, yvar="area", xvar=XVarOptions.ANGLE, fmax=DEFAULT_FMAX, dohemisphere=False):
     fig = plt.figure(figsize=(9,18))
     ax1 = fig.add_subplot(2, 1, 1)
     ax2 = fig.add_subplot(2, 1, 2)
@@ -21,7 +23,7 @@ def plot(data, labels, output=None, xlim=None, ylim=None, anglelim=None, heightl
     colmap = itertools.cycle(range(Ncol))
     for i, (d, l) in enumerate(zip(data, labels)):
         color = matplotlib.cm.hot(float(next(colmap))/float(Ncol))
-        _plot_series(ax1, ax2, d.scanpoints, color, l, yvar=yvar, xlim=xlim, anglelim=anglelim, heightlim=heightlim, xvar=xvar, fmax=fmax, dohemisphere=dohemisphere)
+        _plot_series(ax1, ax2, d.scanpoints, channelname, color, l, yvar=yvar, xlim=xlim, anglelim=anglelim, heightlim=heightlim, centre_height=centre_height, pmt_dist=pmt_dist, xvar=xvar, fmax=fmax, dohemisphere=dohemisphere)
     #finalise the plot
     ax1.legend()
     ax2.legend()
@@ -37,7 +39,7 @@ def plot(data, labels, output=None, xlim=None, ylim=None, anglelim=None, heightl
         _writefig(fig, output)
     return
 
-def _plot_series(ax1, ax2, data, color, label, yvar="area", xlim=None, anglelim=None, heightlim=None, xvar=XVarOptions.ANGLE, fmax=DEFAULT_FMAX, dohemisphere=False):
+def _plot_series(ax1, ax2, data, channelname, color, label, yvar="area", xlim=None, anglelim=None, heightlim=None, centre_height=None, pmt_dist=None, xvar=XVarOptions.ANGLE, fmax=DEFAULT_FMAX, dohemisphere=False):
     temperature = 0.
     humidity = 0.
     if xvar == XVarOptions.COSANGLE:
@@ -46,9 +48,16 @@ def _plot_series(ax1, ax2, data, color, label, yvar="area", xlim=None, anglelim=
         xtransform = lambda x: x.coord_angle
     elif xvar == XVarOptions.HEIGHT:
         xtransform = lambda x: x.coord_y
+    elif xvar == XVarOptions.VERTANGLE:
+        xtransform = lambda x: np.sign(x.coord_y-centre_height) * math.atan(abs(x.coord_y-centre_height) / pmt_dist) * 360 / (2*math.pi)
     elif xvar == XVarOptions.TIME:
         xtransform = lambda x: x.num_entry
-    get_yvar = lambda x: getattr(Waveform(x.axis_time, x.samples_PMT, fmax), yvar)
+
+    if xvar == XVarOptions.VERTANGLE:
+        get_yvar = lambda x: getattr(Waveform(x.axis_time, getattr(x, channelname), fmax), yvar) * fluxtransform(pmt_dist, x.coord_y-centre_height)
+    else:
+        get_yvar = lambda x: getattr(Waveform(x.axis_time, getattr(x, channelname), fmax), yvar)
+    
     X_list, Y_list = [], []
     for d in data:
         if rangecheck(xtransform(d), xlim) and rangecheck(d.coord_angle, anglelim) and rangecheck(d.coord_y, heightlim):
@@ -71,12 +80,7 @@ def _plot_series(ax1, ax2, data, color, label, yvar="area", xlim=None, anglelim=
     ax1.plot(meanX, meanY, "-", color=color, label=label)
     ax1.fill_between(meanX, meanY-errY, meanY+errY, alpha=0.5, color=color)
     ax1.set_ylabel(_get_label(yvar))
-    if xvar == XVarOptions.COSANGLE:
-        ax1.set_xlabel("cos(theta)")
-    elif xvar == XVarOptions.ANGLE:
-        ax1.set_xlabel("angle [degrees]")
-    elif xvar == XVarOptions.TIME:
-        ax1.set_xlabel("measurement number")
+
     #plot fractional change from sigma
     if xvar == XVarOptions.COSANGLE:
         norm_x_point = np.max(X)
@@ -92,12 +96,23 @@ def _plot_series(ax1, ax2, data, color, label, yvar="area", xlim=None, anglelim=
     errY = ((errY / offset) * 100.0)
     ax2.plot(meanX, meanY, "-", color=color, label=label)
     ax2.fill_between(meanX, meanY-errY, meanY+errY, alpha=0.5, color=color)
-    ax2.set_ylabel(r"relative difference [%]")
-    ax2.set_xlabel("angle [degrees]")
-    return
 
-def rangecheck(var, lim):
-    return lim == None or lim[0] <= var <= lim[1]
+    ax2.set_ylabel(r"relative difference [%]")
+
+    if xvar == XVarOptions.COSANGLE:
+        ax1.set_xlabel("cos(theta)")
+        ax2.set_xlabel("cos(theta)")
+    elif xvar == XVarOptions.ANGLE or xvar == XVarOptions.VERTANGLE:
+        ax1.set_xlabel("angle [degrees]")
+        ax2.set_xlabel("angle [degrees]")
+    elif xvar == XVarOptions.HEIGHT:
+        ax1.set_xlabel("PMT height [mm]")
+        ax2.set_xlabel("PMT height [mm]")
+    elif xvar == XVarOptions.TIME:
+        ax1.set_xlabel("measurement number")
+        ax2.set_xlabel("measurement number")
+
+    return
 
 def _writefig(fig, output):
     try:
@@ -127,6 +142,14 @@ def _get_angle_scan_moments(X, Y):
     newX, meanY, errY = zip(*moments)
     return np.array(newX), np.array(meanY), np.array(errY)
 
+def rangecheck(var, lim):
+    return lim == None or lim[0] <= var <= lim[1]
+
+# Transform incoming signal (flux) to match angle in vertical plane at constant distance pmt_dist
+# This is needed in order to plot signal vs. angle in vertical plane, since experimental setup only moves PMT straight up/down
+def fluxtransform(d, h):
+    return math.pow(math.pow(d, 2) + math.pow(h, 2), 3/2) / math.pow(d, 3)
+
 def hemisphere_correction(angle, var, dohemisphere):
     if dohemisphere and var in ["area", "amplitude"]:
         theta = float(angle)*np.pi/180. # Convert to radians
@@ -148,10 +171,13 @@ def parsecml():
     parser.add_argument("--labels", help="Comma separated list of names", default=None)
     parser.add_argument("filename", nargs="+", help="Input filename.")
     parser.add_argument("--combinefiles", action="store_true", help="Combine input files and plot them as a single series.")
+    parser.add_argument("--channel", type=int, default=1, choices=[1, 2], help="Select which digitizer input channel to plot.")
     parser.add_argument("--xlim", type=str, help="Set x-axis limits.", default=None)
     parser.add_argument("--ylim", type=str, help="Set y-axis limits.", default=None)
     parser.add_argument("--anglelim", type=str, help="Set limits on angle.", default=None)
     parser.add_argument("--heightlim", type=str, help="Set limits on PMT height.", default=None)
+    parser.add_argument("--centre_height", type=str, default="0.0", help="Set height where diffuser is centred vs. PMT [mm]. Only used when xvar=vertangle")
+    parser.add_argument("--pmt_dist", type=str, help="Set PMT distance from diffuser [mm]. Only used when xvar=vertangle")
     parser.add_argument("--yvar", type=str, default="area", help="Choose y-axis variable")
     parser.add_argument("--xvar", type=str, default=XVarOptions.ANGLE, choices=XVarOptions.ALL_CHOICES)
     parser.add_argument("--hemisphere-correction", "-c", action="store_true", help="Apply correction (1-theta/pi) to intensity measurments to account for hemisphere geometry.")
@@ -165,11 +191,13 @@ def main():
     data = [readscan(f, "diffuser") for f in args.filename]
     if args.combinefiles:
         data = [combinefiles(data)]
+    channelvars = ["samples_PMT", "samples_PD"]
+    channelname = channelvars[args.channel-1]
     if args.labels:
         labels = args.labels.split(",")
     else:
         labels = ["series %s" % n for n in range(len(data))]
-    xlim, ylim, anglelim, heightlim = None, None, None, None
+    xlim, ylim, anglelim, heightlim, centre_height, pmt_dist = None, None, None, None, None, None
     if args.xlim:
         low, high = args.xlim.split(",")
         xlim = (float(low), float(high))
@@ -182,8 +210,12 @@ def main():
     if args.heightlim:
         low, high = args.heightlim.split(",")
         heightlim = (float(low), float(high))
+    if args.centre_height:
+        centre_height = float(args.centre_height)
+    if args.pmt_dist:
+        pmt_dist = float(args.pmt_dist)    
     fmax=args.fmax if args.filter else None
-    plot(data, labels, args.output, xlim=xlim, ylim=ylim, anglelim=anglelim, heightlim=heightlim, yvar=args.yvar, xvar=args.xvar, fmax=fmax, dohemisphere=args.hemisphere_correction)
+    plot(data, labels, channelname, args.output, xlim=xlim, ylim=ylim, anglelim=anglelim, heightlim=heightlim, centre_height=centre_height, pmt_dist=pmt_dist, yvar=args.yvar, xvar=args.xvar, fmax=fmax, dohemisphere=args.hemisphere_correction)
     return
 
 if __name__ == "__main__":

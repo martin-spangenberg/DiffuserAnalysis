@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from utilities.readscan import readscan, ScanPoint
 from utilities.waveform import Waveform, DEFAULT_FMAX
 
-def plot(data, labels, output=None, xlim=None, ylim=None, height=0.0, angles=[0.0], peaknorm=False, areanorm=False, statistics=False, showfilter=True, fmax=DEFAULT_FMAX):
+def plot(data, labels, channelname, output=None, xlim=None, ylim=None, height=0.0, angles=[0.0], peaknorm=False, areanorm=False, statistics=False, showfilter=True, fmax=DEFAULT_FMAX):
     fig = plt.figure(figsize=(9,9))
     ax1 = fig.add_subplot(1, 2, 1)
     ax2 = fig.add_subplot(1, 2, 2)    
@@ -16,13 +16,13 @@ def plot(data, labels, output=None, xlim=None, ylim=None, height=0.0, angles=[0.
     for d, l in itertools.zip_longest(data, labels):
         for angle in angles:
             color = matplotlib.cm.hot(float(next(colmap))/float(Ncol))
-            waveform = _pick_waveform(d.scanpoints, height, angle, peaknorm, areanorm)
+            waveform = _pick_waveform(d.scanpoints, channelname, height, angle, peaknorm, areanorm)
             lwitha = l + str(r"$\theta=%.0f$"%angle)
             ax1.plot(waveform.X, waveform.Y, label=lwitha, color=color)
             if statistics:
                 _plot_stats(waveform, ax1, lwitha, color)
             if showfilter:
-                waveform_filter = _pick_waveform(d.scanpoints, height, angle, peaknorm, areanorm, fmax)
+                waveform_filter = _pick_waveform(d.scanpoints, channelname, height, angle, peaknorm, areanorm, fmax)
                 ax1.plot(waveform_filter.X, waveform_filter.Y, label="filtered")
             fX, fY = waveform.fft
             ax2.plot(fX, np.abs(fY), label=lwitha, color=color)
@@ -45,13 +45,13 @@ def plot(data, labels, output=None, xlim=None, ylim=None, height=0.0, angles=[0.
         _writefig(fig, output)
     return
 
-def _pick_waveform(scanpoints, height, angle, peaknorm=False, areanorm=False, fmax=None):
+def _pick_waveform(scanpoints, channelname, height, angle, peaknorm=False, areanorm=False, fmax=None):
     for scanpoint in scanpoints:
         if scanpoint.coord_y == height:
             if scanpoint.coord_angle == angle:
-                waveform = scanpoint.getWaveformPMT(fmax, peaknorm, areanorm)
+                waveform = Waveform(scanpoint.axis_time, getattr(scanpoint, channelname), fmax, peaknorm, areanorm)
                 return waveform
-    raise Exception("no matching angle record", angle)
+    raise Exception("no matching record for angle", angle, "and height", height)
 
 def _plot_stats(wave, ax1, label, color):
     _print_waveform(wave, label)
@@ -79,6 +79,7 @@ def _writefig(fig, output):
 def parsecml():
     parser = ArgumentParser()
     parser.add_argument("-o", "--output", help="Output filename", default=None)
+    parser.add_argument("--channel", type=int, default=1, choices=[1, 2], help="Select which digitizer input channel to plot.")
     parser.add_argument("--height", help="Height to plot.", default="0", type=float)
     parser.add_argument("--angle", help="Comma separated list of angles to plot.", default="0", type=str)
     parser.add_argument("--labels", help="Comma separated list of names", default=None)
@@ -96,6 +97,8 @@ def main():
     args = parsecml()
     plt.rc('legend', fontsize="x-small")
     data = [readscan(f, "diffuser") for f in args.filename]
+    channelvars = ["samples_PMT", "samples_PD"]
+    channelname = channelvars[args.channel-1]
     if args.labels:
         labels = args.labels.split(",")
     else:
@@ -109,7 +112,7 @@ def main():
         ylim = (float(low), float(high))
     height = args.height
     angles = [float(x) for x in args.angle.split(",")]
-    plot(data, labels, args.output,
+    plot(data, labels, channelname, args.output,
          xlim=xlim, ylim=ylim, height=height, angles=angles,
          peaknorm=args.peak_norm,
          areanorm=args.area_norm,
