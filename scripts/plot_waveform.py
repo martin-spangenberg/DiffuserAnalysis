@@ -4,8 +4,8 @@ import numpy as np
 from collections import namedtuple
 import matplotlib
 import matplotlib.pyplot as plt
-from utilities.readscan import readscan, ScanPoint
-from utilities.waveform import Waveform, DEFAULT_FMAX
+from scripts.utilities.readscan import readscan, ScanPoint
+from scripts.utilities.waveform import Waveform, DEFAULT_FMAX
 
 def plot(data, labels, channelname, output=None, xlim=None, ylim=None, height=0.0, angles=[0.0], peaknorm=False, areanorm=False, statistics=False, showfilter=True, fmax=DEFAULT_FMAX):
     fig = plt.figure(figsize=(9,9))
